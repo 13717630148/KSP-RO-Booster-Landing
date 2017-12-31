@@ -34,12 +34,11 @@ LOCAL subRunmode IS 0.
 LOCAL currentPosition IS SHIP:GEOPOSITION.
 LOCAL currentAltitude IS 0.
 LOCAL impactPosition IS SHIP:GEOPOSITION.
-LOCAL impactVelocity IS LIST(V(0,0,0), V(0,0,0), V(0,0,0), V(0,0,0), V(0,0,0)).	//	Velocity of impact point, not booster velocity at impact
-LOCAL impactVelocityAvg IS V(0,0,0).
+LOCAL impactVelocity IS V(0,0,0).
 LOCAL lzImpactDistance IS V(0,0,0).
 LOCAL lzCurrentDistance IS V(0,0,0).
 LOCAL launchSiteDistance IS V(0,0,0).
-LOCAL lzPosition IS V(0,0,0).
+LOCAL lzPosition IS SHIP:GEOPOSITION.
 LOCAL lzAltitude IS 0.
 LOCAL boosterDeltaV IS 0.
 LOCAL TR IS ADDONS:TR.
@@ -57,8 +56,7 @@ LOCAL steerAngleMultiplier IS 1.
 //	Engine variables
 LOCAL engineReady IS FALSE.
 LOCAL engineStartup IS FALSE.
-LOCAL engineThrottle IS LIST(1,1,1).
-LOCAL engineThrottleAvg IS 1.
+LOCAL engineThrottle IS 1.
 LOCAL stable IS FALSE.
 //	Time tracking variables
 LOCAL dT IS 0.				//	Delta time
@@ -75,7 +73,7 @@ LOCAL landingSpeed IS 0.
 LOCAL reentryBurnDeltaV IS 0.
 LOCAL flipDirection IS 0.
 LOCAL flipSpeed IS 24.
-LOCAL partCount IS 0. // Used to determine if upper stage has separated already
+LOCAL partCount IS 0.	//	Used to determine if upper stage has separated already
 //	Messaging variables
 LOCAL lastResponse IS LEXICON().
 //	Vectors to be displayed
@@ -84,7 +82,8 @@ LOCAL vec2 IS 0.
 LOCAL vec3 IS 0.
 LOCAL vec4 IS 0.
 //	Other variables
-LOCAL bodyRotation IS 360 / BODY:ROTATIONPERIOD.
+LOCAL refreshCounter IS 0.
+LOCAL refreshIntervals IS 10.	//	How many physics ticks between refreshes
 //	Change-tracking variables
 LOCAL previousPosition IS SHIP:GEOPOSITION.
 LOCAL previousImpactPosition IS SHIP:GEOPOSITION.
@@ -116,9 +115,11 @@ FUNCTION Main {
 	IF 		runmode = 0 { Prelaunch().	}
 	ELSE IF runmode = 1 { Launch().		}
 	ELSE IF runmode = 2 { Boostback().	}
-	ELSE IF runmode = 3 { Reentry().	}	//	To be improved...
+	ELSE IF runmode = 3 { Reentry().	}
 	ELSE IF runmode = 4 { Recovery().	}
-	RefreshUI().
+	IF refreshCounter = refreshIntervals {
+		RefreshUI().
+	}
 	UpdateVars("end").
 	IF runmode = 5 { RETURN TRUE. } ELSE { RETURN FALSE. }
 }
@@ -128,23 +129,30 @@ FUNCTION UpdateVars {
 	PARAMETER type.
 
 	IF type = "start" {
+		SET refreshCounter TO refreshCounter + 1.
 		SET mT TO TIME:SECONDS.
 		SET dT TO mT - pT.
 		SET currentAltitude TO BODY:ALTITUDEOF(SHIP:PARTSTAGGED(vehicle["bottomPart"]["name"])[0]:position) - vehicle["bottomPart"]["heightOffset"].
 		SET currentPosition to SHIP:GEOPOSITION.
 		SET impactTime to timeToAltitude(lzAltitude, currentAltitude).
 		IF TR:HASIMPACT { SET impactPosition TO TR:IMPACTPOS. }	//	Need to test if else condition is needed
-		SET impactVelocity[4] TO impactVelocity[3]. SET impactVelocity[3] TO impactVelocity[2]. SET impactVelocity[2] TO impactVelocity[1]. SET impactVelocity[1] TO impactVelocity[0].
-		SET impactVelocity[0] TO (impactPosition:ALTITUDEPOSITION(lzAltitude) - previousImpactPosition:ALTITUDEPOSITION(lzAltitude))/dT.	//	Not precise at all. Needs attention
-		SET impactVelocityAvg TO (impactVelocity[0] + impactVelocity[0] + impactVelocity[0] + impactVelocity[0] + impactVelocity[0])/5.
-		SET lzCurrentDistance TO lzPosition:POSITION - SHIP:GEOPOSITION:ALTITUDEPOSITION(lzAltitude).	//	Ship -> LZ
-		SET lzImpactDistance TO lzPosition:POSITION - impactPosition:ALTITUDEPOSITION(lzAltitude).		//	Impact point -> LZ
-		SET boosterDeltaV TO Booster("deltaV").
-		SET lzBoosterOffset TO VXCL(lzCurrentDistance - BODY:POSITION, lzCurrentDistance):NORMALIZED * lzOffsetDistance.	//	Flattened and sized <lzCurrentDistance>
-		SET lzImpactOffset TO VXCL(lzImpactDistance - BODY:POSITION, lzImpactDistance):NORMALIZED * lzOffsetDistance.		//	Flattened and sized <lzImpactDistance>
-		SET landingOffset TO lzPosition:POSITION + lzBoosterOffset - impactPosition:ALTITUDEPOSITION(lzAltitude).			//	Pos behind the LZ to aim at during descent
-		SET launchSiteDistance TO (landing["launchLocation"]:POSITION - SHIP:GEOPOSITION:ALTITUDEPOSITION(lzAltitude)):MAG.	//	Downrange distance
+
+		IF runmode = 2 OR runmode = 4 OR refreshCounter = refreshIntervals-1 {
+			SET lzCurrentDistance TO lzPosition:POSITION - SHIP:GEOPOSITION:ALTITUDEPOSITION(lzAltitude).						//	Ship -> LZ
+			SET lzImpactDistance TO lzPosition:POSITION - impactPosition:ALTITUDEPOSITION(lzAltitude).							//	Impact point -> LZ
+			SET lzBoosterOffset TO VXCL(lzCurrentDistance - BODY:POSITION, lzCurrentDistance):NORMALIZED * lzOffsetDistance.	//	Flattened and sized <lzCurrentDistance>
+			SET landingOffset TO lzPosition:POSITION + lzBoosterOffset - impactPosition:ALTITUDEPOSITION(lzAltitude).			//	Pos behind the LZ to aim at during descent
+		}
+		IF runmode = 2 OR refreshCounter = refreshIntervals-1 {
+			SET boosterDeltaV TO Booster("deltaV").
+			SET lzImpactOffset TO VXCL(lzImpactDistance - BODY:POSITION, lzImpactDistance):NORMALIZED * lzOffsetDistance.		//	Flattened and sized <lzImpactDistance>
+		}
+		IF refreshCounter = refreshIntervals-1 {
+			SET launchSiteDistance TO (landing["launchLocation"]:POSITION - SHIP:GEOPOSITION:ALTITUDEPOSITION(lzAltitude)):MAG.	//	Downrange distance
+			SET impactVelocity TO (impactPosition:ALTITUDEPOSITION(lzAltitude) - previousImpactPosition:ALTITUDEPOSITION(lzAltitude))/dT.	//	Not precise at all. Needs attention
+		}
 	} ELSE IF type = "end" {
+		IF refreshCounter >= refreshIntervals { SET refreshCounter TO 0. }
 		SET pT TO mT.
 		SET previousImpactPosition TO impactPosition.
 	}
@@ -186,7 +194,7 @@ FUNCTION Launch {
 
 			SET shutdownCondition TO { RETURN deltaVatSep > boosterDeltaV - 30. }.
 			SET throttleCondition TO { RETURN deltaVatSep > boosterDeltaV - 15. }.
-			IF throttleCondition() { SET engineThrottle[0] TO MIN(1, MAX(0, (boosterDeltaV-deltaVatSep)/15)). }
+			IF throttleCondition() { SET engineThrottle TO MIN(1, MAX(0, (boosterDeltaV-deltaVatSep)/15)). }
 			SET separationCondition TO { RETURN deltaVatSep > boosterDeltaV. }.
 
 		} ELSE {
@@ -206,7 +214,7 @@ FUNCTION Launch {
 		
 		IF throttleCondition() {
 			//	Progressively decrease throttle
-			Engines("throttle", Engines("centerEngines"), MIN(throttleLimit, engineThrottle[0])).
+			Engines("throttle", Engines("centerEngines"), MIN(throttleLimit, engineThrottle)).
 			SET temporaryValues["separationPhase"] TO 3.
 		} ELSE {
 			Engines("throttle", Engines("allEngines"), throttleLimit).
@@ -465,10 +473,8 @@ FUNCTION Recovery {
 		}
 	} ELSE IF subRunmode = 1 {	//	Control the throttle of center engine and shut it down once landed
 		SET VelThr_PID:SETPOINT TO -landingSpeed.
-		SET engineThrottle[2] TO engineThrottle[1]. SET engineThrottle[1] TO engineThrottle[0].
-		SET engineThrottle[0] TO VelThr_PID:UPDATE(mT, -SHIP:VELOCITY:SURFACE:MAG)/COS(VANG(UP:VECTOR, SHIP:FACING:FOREVECTOR)).
-		SET engineThrottleAvg TO (engineThrottle[0] + engineThrottle[1] + engineThrottle[2])/3.
-		Engines("throttle", Engines("centerEngines"), engineThrottleAvg).
+		SET engineThrottle TO VelThr_PID:UPDATE(mT, -SHIP:VELOCITY:SURFACE:MAG)/COS(VANG(UP:VECTOR, SHIP:FACING:FOREVECTOR)).
+		Engines("throttle", Engines("centerEngines"), engineThrottle).
 
 		IF landingParam = 0 OR VERTICALSPEED >= 0 {
 			Engines("stop", Engines("landingEngines")).
