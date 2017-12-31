@@ -238,17 +238,16 @@ FUNCTION Recovery {
 				SET landingParam TO landingParam -1.
 			} ELSE { BREAK. }
 		}
-		SET landingParam TO landingParam -1.
 	}
 	PRINT "Landing param:   " + landingParam + "     " AT (3,25).
-	//IF landingParam < landingBurnData["altitude"]:LENGTH-1 {
-	//	//	May not even need the code below, need to test and see if any significant precision is gained
-	//	LOCAL speedMultiplier IS (currentAltitude - landingBurnData["altitude"][landingParam])/(landingBurnData["altitude"][landingParam+1] - landingBurnData["altitude"][landingParam]).
-	//	SET landingSpeed TO landingBurnData["speed"][landingParam] + (landingBurnData["speed"][landingParam+1] - landingBurnData["speed"][landingParam]) * speedMultiplier.
-	//	PRINT 1 AT (1,26).
-	//} ELSE {
-	SET landingSpeed TO landingBurnData["speed"][landingParam]. PRINT 2 AT (1,26).
-	//}
+	IF landingParam < landingBurnData["altitude"]:LENGTH-1 {
+		//	May not even need the code below, need to test and see if any significant precision is gained
+		LOCAL speedMultiplier IS (currentAltitude - landingBurnData["altitude"][landingParam])/(landingBurnData["altitude"][landingParam+1] - landingBurnData["altitude"][landingParam]).
+		SET landingSpeed TO landingBurnData["speed"][landingParam] + (landingBurnData["speed"][landingParam+1] - landingBurnData["speed"][landingParam]) * speedMultiplier.
+		PRINT 1 AT (1,26).
+	} ELSE {
+		SET landingSpeed TO landingBurnData["speed"][landingParam]. PRINT 2 AT (1,26).
+	}
 	PRINT "Landing speed:   " + landingSpeed + "     " AT (3,26).
 
 	IF subRunmode = 0 {	//	Control when engines are being started and shut down

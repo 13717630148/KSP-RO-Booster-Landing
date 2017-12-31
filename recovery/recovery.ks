@@ -100,6 +100,11 @@ LOCAL UILex IS LEXICON("time", LIST(), "message", LIST()).
 LOCAL UILexLength IS 0.
 CreateUI().
 
+//	Debug lines below
+LOG " " TO "0:/logs/impPos.csv".
+REMOVE("0:/logs/impPos.csv").
+LOG "Time,Latitude,Longitude,HasImpact" TO "0:/logs/impPos.csv".
+
 //	Landing setup
 IF landing["required"] {
 	SET lzPosition TO landing["location"].
@@ -135,7 +140,31 @@ FUNCTION UpdateVars {
 		SET currentAltitude TO BODY:ALTITUDEOF(SHIP:PARTSTAGGED(vehicle["bottomPart"]["name"])[0]:position) - vehicle["bottomPart"]["heightOffset"].
 		SET currentPosition to SHIP:GEOPOSITION.
 		SET impactTime to timeToAltitude(lzAltitude, currentAltitude).
-		IF TR:HASIMPACT { SET impactPosition TO TR:IMPACTPOS. }	//	Need to test if else condition is needed
+		//	Debugging the line below:
+		IF TR:HASIMPACT { SET impactPosition TO TR:IMPACTPOS. LOG mT + "," + impactPosition:LAT + "," + impactPosition:LNG + ",true" TO "0:/logs/impPos.csv". }	//	Need to test if else condition is needed
+		ELSE { LOG mT + "," + impactPosition:LAT + "," + impactPosition:LNG + ",false" TO "0:/logs/impPos.csv". }
+		//	If impactPosition not always updated, try using the code below. May need to be changed depending on result of test above.
+		
+		//	START
+
+		//	Needs to go to var declarations
+
+		//LOCAL olderImpactPosition IS SHIP:GEOPOSITION.
+		//LOCAL impactPositionChange IS V(0,0,0).
+
+		//	Needs to replace old impact setting
+
+		//IF TR:HASIMPACT { SET impactPosition TO TR:IMPACTPOS. }
+		//ELSE {
+		//	SET impactPositionChange TO previousImpactPosition:ALTITUDEPOSITION(lzAltitude) - olderImpactPosition:ALTITUDEPOSITION(lzAltitude).
+		//	SET impactPosition TO BODY:GEOPOSITIONOF(previousImpactPosition:ALTITUDEPOSITION(lzAltitude) + impactPositionChange).
+		//}
+
+		//	Needs to go to "end" var updates
+
+		//SET olderImpactPosition TO previousImpactPosition.
+
+		//	END
 
 		IF runmode = 2 OR runmode = 4 OR refreshCounter = refreshIntervals-1 {
 			SET lzCurrentDistance TO lzPosition:POSITION - SHIP:GEOPOSITION:ALTITUDEPOSITION(lzAltitude).						//	Ship -> LZ
@@ -447,15 +476,14 @@ FUNCTION Recovery {
 				SET landingParam TO landingParam -1.
 			} ELSE { BREAK. }
 		}
-		SET landingParam TO landingParam -1.
 	}
-	//IF landingParam < landingBurnData["altitude"]:LENGTH-1 {
-	//	//	May not even need the code below, need to test and see if any significant precision is gained
-	//	LOCAL speedMultiplier IS (currentAltitude - landingBurnData["altitude"][landingParam])/(landingBurnData["altitude"][landingParam+1] - landingBurnData["altitude"][landingParam]).
-	//	SET landingSpeed TO landingBurnData["speed"][landingParam] + (landingBurnData["speed"][landingParam+1] - landingBurnData["speed"][landingParam]) * speedMultiplier.
-	//} ELSE {
-	SET landingSpeed TO landingBurnData["speed"][landingParam].
-	//}
+	IF landingParam < landingBurnData["altitude"]:LENGTH-1 {
+		//	May not even need the code below, need to test and see if any significant precision is gained
+		LOCAL speedMultiplier IS (currentAltitude - landingBurnData["altitude"][landingParam])/(landingBurnData["altitude"][landingParam+1] - landingBurnData["altitude"][landingParam]).
+		SET landingSpeed TO landingBurnData["speed"][landingParam] + (landingBurnData["speed"][landingParam+1] - landingBurnData["speed"][landingParam]) * speedMultiplier.
+	} ELSE {
+		SET landingSpeed TO landingBurnData["speed"][landingParam].
+	}
 
 	IF subRunmode = 0 {	//	Control when engines are being started and shut down
 		IF TimeToAltitude(landingBurnData["altitude"][landingParam], currentAltitude) < vehicle["engines"]["spoolUpTime"] - 2 {
